@@ -5,7 +5,7 @@ cd /work
 
 # Docker-friendly pacman settings
 sed -i 's/^CheckSpace/#CheckSpace/' /etc/pacman.conf
-if pacman --help | grep -q disable-sandbox; then
+if pacman -S --help | grep -q -- '--disable-sandbox'; then
   sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
 fi
 
