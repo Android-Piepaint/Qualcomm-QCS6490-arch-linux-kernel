@@ -17,9 +17,15 @@ id builder &>/dev/null || useradd -m builder
 echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
 chown -R builder:builder /work
 
+# Force zstd packages (Arch ARM's makepkg.conf may default to xz)
+sed -i "s/^#\?PKGEXT=.*/PKGEXT='.pkg.tar.zst'/" /etc/makepkg.conf
+
+mkdir -p /work/repo
+chown builder:builder /work/repo
 su builder -c 'cd /work/pkg && KSRC=/work/linux MAKEFLAGS="-j$(nproc)" PKGDEST=/work/repo makepkg -f --noconfirm --skippgpcheck'
 
 cd /work/repo
+ls -lh
 rm -f sc7280.db* sc7280.files*
 repo-add sc7280.db.tar.zst ./*.pkg.tar.zst
-ls -lh /work/repo
+ls -lh
