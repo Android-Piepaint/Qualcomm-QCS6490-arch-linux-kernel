@@ -1,0 +1,65 @@
+name: Build kernel and publish pacman repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: "Branch or tag of sc7280-mainline/linux (empty = default branch)"
+        default: ""
+  push:
+    branches: [main]
+    paths: [config, pkg/**, build.sh, .github/workflows/build.yml]
+
+env:
+  KERNEL_REPO: https://github.com/sc7280-mainline/linux.git
+  # Set a repo variable KERNEL_REF (Settings > Variables) to pin a branch/tag for push-triggered builds
+  KERNEL_REF: ${{ inputs.kernel_ref || vars.KERNEL_REF || '' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm   # native arm64, free for public repos
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache || true
+          df -h /
+
+      - name: Shallow-clone kernel source
+        run: |
+          git clone --depth 1 ${KERNEL_REF:+--branch "$KERNEL_REF"} "$KERNEL_REPO" linux
+          make -C linux -s kernelversion
+
+      - name: Import Arch Linux ARM rootfs as a Docker image
+        run: |
+          curl -fL http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz \
+            | sudo docker import - archlinuxarm
+
+      - name: Build package + repo database
+        run: |
+          sudo docker run --rm --platform linux/arm64 -v "$PWD":/work archlinuxarm bash /work/build.sh
+
+      - name: Assemble site (dereference repo-add symlinks)
+        run: |
+          sudo cp -rL repo site
+          sudo touch site/.nojekyll
+          ls -lh site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
